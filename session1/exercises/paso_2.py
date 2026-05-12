@@ -58,7 +58,7 @@ def load_regressor() -> dict:
     # Carga ROOT / "session1" / "models" / "regressor.pkl"
     # con joblib.load(...).
     # ──────────────────────────────────────────────────────
-    return ___
+    return joblib.load(ROOT / "session1" / "models" / "regressor.pkl")
 
 
 @st.cache_resource
@@ -67,7 +67,7 @@ def load_clusterer() -> dict:
     # Carga ROOT / "session1" / "models" / "clusterer.pkl"
     # con joblib.load(...).
     # ──────────────────────────────────────────────────────
-    return ___
+    return joblib.load(ROOT / "session1" / "models" / "clusterer.pkl")
 
 
 # ── Helper: construye features (igual que en paso_1) ───────
@@ -137,7 +137,7 @@ with col_reg:
     #   2. acv_pred = np.exp(predicción_log)[0]
     # Concéntralo en una sola línea o dos.
     # ──────────────────────────────────────────────────────
-    acv_pred = ___
+    acv_pred = np.exp(regressor["model"].predict(X_reg))[0]
 
     st.metric("ACV predicho", f"{acv_pred:,.0f} €")
     st.caption(f"cotizado real: `{lead['quoted_acv_eur']:,.0f} €`")
@@ -157,7 +157,7 @@ with col_clu:
     #   1. X_scaled = clusterer["scaler"].transform(X_clu)
     #   2. cluster_id = clusterer["model"].predict(X_scaled)[0]
     # ──────────────────────────────────────────────────────
-    cluster_id = ___
+    cluster_id = clusterer["model"].predict(clusterer["scaler"].transform(X_clu))[0]
 
     st.metric("Cluster", f"#{cluster_id}")
     st.caption(f"arquetipo plantado: `{lead['lead_segment_truth']}`")

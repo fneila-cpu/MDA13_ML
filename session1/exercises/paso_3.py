@@ -76,7 +76,7 @@ def load_timeseries() -> dict:
     # 'history' (pd.Series con la historia mensual) y
     # 'validation_mape' (MAPE en hold-out de los últimos 3 meses).
     # ──────────────────────────────────────────────────────
-    return ___
+    return joblib.load(ROOT / "session1" / "models" / "timeseries.pkl")
 
 
 # ── Helpers (igual que en paso_2) ──────────────────────────
@@ -160,13 +160,13 @@ st.subheader("📈 Histórico de conversiones + forecast")
 # index de fechas mensuales y valores = nº de conversiones.
 #   ts["history"]
 # ──────────────────────────────────────────────────────────
-history: pd.Series = ___
+history: pd.Series = ts["history"]
 
 # ── HUECO 3 ────────────────────────────────────────────────
 # Saca el modelo Prophet del pkl.
 #   ts["model"]  →  Prophet ya entrenado
 # ──────────────────────────────────────────────────────────
-ts_model = ___
+ts_model = ts["model"]
 
 # Estos dos pasos están pre-rellenados — son mecánicos y no son la lección.
 # `fc` es el DataFrame completo que devuelve Prophet, con columnas
@@ -181,7 +181,7 @@ fc = ts_model.predict(future)
 # Pista — UNA LÍNEA:
 #   forecast = fc.set_index("ds")["yhat"].iloc[-forecast_months:]
 # ──────────────────────────────────────────────────────────
-forecast: pd.Series = ___
+forecast: pd.Series = fc.set_index("ds")["yhat"].iloc[-forecast_months:]
 
 # ── HUECO 5 ────────────────────────────────────────────────
 # El DataFrame ya está montado. Lo que falta es el **bridge**: una
@@ -199,7 +199,7 @@ forecast: pd.Series = ___
 # continua.
 # ──────────────────────────────────────────────────────────
 chart_df = pd.DataFrame({"histórico": history, "forecast": forecast})
-___   # ← escribe aquí el bridge (1 línea)
+chart_df.loc[history.index[-1], "forecast"] = history.iloc[-1]
 
 st.line_chart(chart_df, height=300)
 st.caption(
@@ -252,7 +252,15 @@ fig.add_trace(go.Scatter(
 #       showlegend=True,
 #   ))
 # ──────────────────────────────────────────────────────────
-___
+fig.add_trace(go.Scatter(
+    x=list(forecast_dates) + list(forecast_dates[::-1]),
+    y=list(yhat_upper) + list(yhat_lower[::-1]),
+    fill="toself",
+    fillcolor="rgba(255,165,0,0.15)",
+    line=dict(color="rgba(0,0,0,0)"),
+    name="banda 80%",
+    showlegend=True,
+))
 
 st.plotly_chart(fig, use_container_width=True)
 st.caption(

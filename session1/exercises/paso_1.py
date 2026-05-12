@@ -72,7 +72,7 @@ def load_classifier() -> dict:
     # Ejemplo de uso:
     #     joblib.load("ruta/al/archivo.pkl")
     # ──────────────────────────────────────────────────────
-    return ___
+    return joblib.load(ROOT / "session1" / "models" / "classifier.pkl")
 
 
 # ── Helper: construye la matriz de features para un lead ───
@@ -147,7 +147,7 @@ with col_pred:
     #
     # Quédate con la probabilidad de convertir: [0, 1].
     # ──────────────────────────────────────────────────────
-    proba = ___
+    proba = clf_model.predict_proba(X_lead)[0, 1]
 
     st.metric("P(convertir)", f"{proba:.1%}")
 
