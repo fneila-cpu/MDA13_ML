@@ -93,7 +93,27 @@ client = get_openai_client()
 #   Termina asignando el resultado a una variable llamada `resultado`.
 #   Devuelve SÓLO un bloque ```python ... ```, sin explicación."""
 # ──────────────────────────────────────────────────────────
-SYSTEM_PROMPT = ___
+SYSTEM_PROMPT = """Eres un analista de datos. Tienes un DataFrame de pandas llamado `df` con estas columnas:
+- lead_id (str): identificador único del lead
+- company_name (str): nombre de la empresa
+- industry (str): sector — SaaS, fintech, retail, logistics, healthcare, unknown
+- company_size (int): número de empleados
+- country (str): ES, FR, DE, UK, IT, PT, unknown
+- signup_date (str): fecha de registro, formato YYYY-MM-DD
+- source (str): canal de adquisición — organic, paid, referral, conference, outbound, unknown
+- demo_requested (bool): si solicitó demo
+- emails_opened (int): emails abiertos
+- response_time_hours (float): horas hasta respuesta
+- n_meetings (int): número de reuniones
+- decision_maker_contacted (bool): si se contactó al decisor
+- quoted_acv_eur (float): ACV cotizado en euros
+- company_description (str): descripción libre de la empresa
+- converted (bool): si se convirtió en cliente
+- converted_within_days (float): días hasta conversión, NaN si no convirtió
+
+Genera código Python pandas para responder la pregunta del usuario.
+Termina asignando el resultado a una variable llamada `resultado`.
+Devuelve SÓLO un bloque ```python ... ```, sin explicación."""
 
 
 # ── HUECO 2 ────────────────────────────────────────────────
@@ -109,7 +129,15 @@ SYSTEM_PROMPT = ___
 # Devuelve response.choices[0].message.content.
 # ──────────────────────────────────────────────────────────
 def ask_llm_for_code(pregunta: str) -> str:
-    text = ___
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": pregunta},
+        ],
+        temperature=0.0,
+    )
+    text = response.choices[0].message.content
     return text
 
 
@@ -125,7 +153,8 @@ def ask_llm_for_code(pregunta: str) -> str:
 # usado backticks).
 # ──────────────────────────────────────────────────────────
 def extract_code(text: str) -> str:
-    code = ___
+    match = re.search(r"```(?:python)?\n(.*?)```", text, re.DOTALL)
+    code = match.group(1) if match else text
     return code
 
 
@@ -140,7 +169,9 @@ def extract_code(text: str) -> str:
 # ──────────────────────────────────────────────────────────
 def run_code(code: str, df: pd.DataFrame):
     try:
-        result = ___
+        ns = {"df": df, "pd": pd, "np": np}
+        exec(code, ns)
+        result = ns.get("resultado", "(no se asignó `resultado`)")
         return result, None
     except Exception as e:
         return None, str(e)
@@ -165,13 +196,15 @@ ejemplos = [
     "Distribución de conversiones por mes de signup.",
 ]
 
+if "pregunta_guardada" not in st.session_state:
+    st.session_state["pregunta_guardada"] = ""
+
 cols = st.columns(len(ejemplos))
-clicked = None
 for i, ej in enumerate(ejemplos):
     if cols[i].button(ej, key=f"ej_{i}", use_container_width=True):
-        clicked = ej
+        st.session_state["pregunta_guardada"] = ej
 
-pregunta = st.text_area("O escribe la tuya:", value=clicked or "", height=80)
+pregunta = st.text_area("O escribe la tuya:", key="pregunta_guardada", height=80)
 
 if st.button("Preguntar", type="primary", disabled=not pregunta.strip()):
     with st.spinner("LLM redactando código…"):

@@ -119,7 +119,12 @@ MODEL = "gpt-4.1-mini"
 #   Descripción: {description}"""
 # ──────────────────────────────────────────────────────────
 def build_scoring_prompt(description: str) -> str:
-    return ___
+    return (
+        f"Eres un analista comercial B2B en Cañadata, una SaaS de gestión de pipeline. "
+        f"Lee la descripción de la empresa y estima la probabilidad (0-100) de que se convierta en cliente. "
+        f"Devuelve SÓLO el número entero, sin explicación.\n\n"
+        f"Descripción: {description}"
+    )
 
 
 # ── HUECO 2 ────────────────────────────────────────────────
@@ -135,14 +140,15 @@ def build_scoring_prompt(description: str) -> str:
 def llm_score_lead(_client, lead_id: str, description: str) -> int:
     """Cached por (lead_id, description). _client opta fuera del hash."""
     prompt = build_scoring_prompt(description)
-    text = ___
+    response = _client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=10,
+    )
+    text = response.choices[0].message.content
 
-    # ── HUECO 3 ────────────────────────────────────────────
-    # `text` viene como "73" o "73%" o "Probabilidad: 73". Saca
-    # el número entero. Si no encuentras nada, devuelve -1.
-    # Pista: usa re.search(r"\d+", text) y .group(0).
-    # ──────────────────────────────────────────────────────
-    score = ___
+    match = re.search(r"\d+", text)
+    score = int(match.group(0)) if match else -1
     return score
 
 

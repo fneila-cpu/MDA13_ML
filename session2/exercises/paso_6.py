@@ -115,7 +115,11 @@ df = load_data()
 classifier = load_classifier()
 regressor = load_regressor()
 clusterer = load_clusterer()
-timeseries = load_timeseries()
+try:
+    timeseries = load_timeseries()
+except Exception as e:
+    timeseries = None
+    st.warning(f"⚠️ Series temporales no disponibles (Prophet): {e}")
 client = get_openai_client()
 
 
@@ -150,7 +154,31 @@ client = get_openai_client()
 #   - Termina con `resultado = ...`.
 #   - Devuelve SÓLO ```python ... ```."""
 # ──────────────────────────────────────────────────────────
-SYSTEM_PROMPT_OPERADOR = ___
+SYSTEM_PROMPT_OPERADOR = """Eres un analista que tiene acceso a:
+- `df` (DataFrame de Cañadata, columnas: lead_id, company_name, industry, company_size, country, signup_date, source, demo_requested, emails_opened, response_time_hours, n_meetings, decision_maker_contacted, quoted_acv_eur, company_description, converted, converted_within_days)
+- `classifier` (dict con keys 'model', 'feature_names'). Para predecir conversión sobre 1 lead:
+      lead_dict = df[df['lead_id'] == 'LXXXX'].iloc[0].to_dict()
+      X = build_X(lead_dict, CLF_INPUT_COLS, classifier['feature_names'])
+      proba = classifier['model'].predict_proba(X)[0, 1]
+- `regressor` (igual estructura, target en log space; usa np.exp para convertir a euros).
+- `clusterer` (dict con 'model', 'scaler', 'feature_names'). Para asignar cluster:
+      X = build_X(lead_dict, REG_INPUT_COLS, clusterer['feature_names'])
+      cluster_id = clusterer['model'].predict(clusterer['scaler'].transform(X))[0]
+- `timeseries` (dict con 'model' (Prophet), 'history', 'validation_mape'). Para forecast:
+      future = timeseries['model'].make_future_dataframe(periods=N, freq='MS')
+      fc = timeseries['model'].predict(future)
+      resultado = fc.set_index('ds')['yhat'].iloc[-N:]
+- `build_X(lead_dict, columns, training_features)` helper para construir la matriz de features.
+- `CLF_INPUT_COLS`, `REG_INPUT_COLS` listas de columnas para cada modelo.
+
+Reglas:
+- Para preguntas sobre probabilidad de conversión de un lead concreto: usa el clasificador.
+- Para preguntas sobre tasas, distribuciones o estadísticas históricas: usa `df`.
+- Para predicciones de ACV: usa el regresor (recuerda np.exp).
+- Para preguntas de forecast futuro: usa timeseries.
+- Para asignar un lead a un cluster: usa el clusterer.
+- Termina asignando el resultado a una variable llamada `resultado`.
+- Devuelve SÓLO un bloque ```python ... ```, sin explicación."""
 
 
 # Mismo prompt simplificado para el modo ANALISTA (sólo `df`, sin modelos)
@@ -169,7 +197,15 @@ def ask_llm_for_code(pregunta: str, system_prompt: str) -> str:
     # ── HUECO 3 ────────────────────────────────────────────
     # Llama al LLM con system + user. Igual que paso_5.
     # ──────────────────────────────────────────────────────
-    text = ___
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": pregunta},
+        ],
+        temperature=0.0,
+    )
+    text = response.choices[0].message.content
     return text
 
 
@@ -186,7 +222,17 @@ def run_code(code: str, mode: str):
     #     timeseries, build_X, CLF_INPUT_COLS, REG_INPUT_COLS.
     # Luego: exec(code, ns); return ns.get("resultado", ...)
     # ──────────────────────────────────────────────────────
-    ns = ___
+    ns = {"df": df, "pd": pd, "np": np}
+    if mode == "operador":
+        ns.update({
+            "classifier": classifier,
+            "regressor": regressor,
+            "clusterer": clusterer,
+            "timeseries": timeseries,
+            "build_X": build_X,
+            "CLF_INPUT_COLS": CLF_INPUT_COLS,
+            "REG_INPUT_COLS": REG_INPUT_COLS,
+        })
 
     try:
         exec(code, ns)
@@ -217,13 +263,15 @@ ejemplos = [
     "¿En qué cluster cae el lead L0050?",
 ]
 
+if "pregunta_guardada_6" not in st.session_state:
+    st.session_state["pregunta_guardada_6"] = ""
+
 cols = st.columns(len(ejemplos))
-clicked = None
 for i, ej in enumerate(ejemplos):
     if cols[i].button(ej, key=f"ej_{i}", use_container_width=True):
-        clicked = ej
+        st.session_state["pregunta_guardada_6"] = ej
 
-pregunta = st.text_area("O escribe la tuya:", value=clicked or "", height=80)
+pregunta = st.text_area("O escribe la tuya:", key="pregunta_guardada_6", height=80)
 
 
 if st.button("Preguntar (modo OPERADOR)", type="primary", disabled=not pregunta.strip()):
@@ -261,7 +309,34 @@ if st.button("Preguntar (modo OPERADOR)", type="primary", disabled=not pregunta.
 #           res_op, err_op = run_code(code_op, "operador")
 #           # render
 # ──────────────────────────────────────────────────────────
-___
+if st.button("Comparar modos", disabled=not pregunta.strip()):
+    col_an, col_op = st.columns(2)
+    with col_an:
+        st.markdown("### Modo analista (sólo df)")
+        with st.spinner("LLM modo analista…"):
+            code_an = extract_code(ask_llm_for_code(pregunta, SYSTEM_PROMPT_ANALISTA))
+        with st.expander("👁 Código (analista)"):
+            st.code(code_an, language="python")
+        res_an, err_an = run_code(code_an, "analista")
+        if err_an:
+            st.error(f"Error: {err_an}")
+        elif isinstance(res_an, (pd.DataFrame, pd.Series)):
+            st.dataframe(res_an, use_container_width=True)
+        else:
+            st.write(res_an)
+    with col_op:
+        st.markdown("### Modo operador (df + modelos)")
+        with st.spinner("LLM modo operador…"):
+            code_op = extract_code(ask_llm_for_code(pregunta, SYSTEM_PROMPT_OPERADOR))
+        with st.expander("👁 Código (operador)"):
+            st.code(code_op, language="python")
+        res_op, err_op = run_code(code_op, "operador")
+        if err_op:
+            st.error(f"Error: {err_op}")
+        elif isinstance(res_op, (pd.DataFrame, pd.Series)):
+            st.dataframe(res_op, use_container_width=True)
+        else:
+            st.write(res_op)
 
 
 st.divider()
