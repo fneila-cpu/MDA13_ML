@@ -1,3 +1,4 @@
+
 # ============================================================
 # paso_7.py · Asistente del comercial (chat con tools)
 # ============================================================
@@ -379,16 +380,16 @@ TOOL_SCHEMAS = {
 TOOL_FUNCS = {
     "extract_lead_from_text": extract_lead_from_text,  # ya activa
     # HUECO 1 · activa predict_conversion para que el bot sepa estimar P(convertir):
-    # añade aquí una línea con la forma: "predict_conversion": predict_conversion,
+    "predict_conversion": predict_conversion,
 
     # HUECO 2 · activa predict_acv para que estime el valor del contrato:
-    # añade aquí: "predict_acv": predict_acv,
+    "predict_acv": predict_acv,
 
     # HUECO 3 · activa get_archetype para que devuelva el arquetipo:
-    # añade aquí: "get_archetype": get_archetype,
+    "get_archetype": get_archetype,
 
     # HUECO 4 · activa find_similar_leads para que busque parecidos en el histórico:
-    # añade aquí: "find_similar_leads": find_similar_leads,
+    "find_similar_leads": find_similar_leads,
 }
 
 
@@ -492,6 +493,9 @@ def run_assistant(user_message: str, history: list[dict]) -> tuple[str, list[dic
             args = json.loads(tc.function.arguments)
             if name in TOOL_FUNCS:
                 try:
+                    if name in ("predict_conversion", "predict_acv", "get_archetype", "find_similar_leads"):
+                        if "lead" not in args:
+                            args = {"lead": args}
                     result = TOOL_FUNCS[name](**args)
                 except Exception as e:
                     result = {"error": f"{type(e).__name__}: {e}"}
